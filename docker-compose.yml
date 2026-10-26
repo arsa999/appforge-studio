@@ -1,0 +1,43 @@
+services:
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
+    volumes: ["redis-data:/data"]
+    restart: unless-stopped
+    networks: [private]
+  api:
+    build: ./api
+    environment:
+      PORT: "8787"
+      REDIS_URL: redis://redis:6379
+      BUILD_API_TOKEN: ${BUILD_API_TOKEN:?Set BUILD_API_TOKEN in .env}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:8080}
+    ports: ["127.0.0.1:8787:8787"]
+    depends_on: [redis]
+    restart: unless-stopped
+    networks: [private]
+  worker:
+    build:
+      context: .
+      dockerfile: worker/Dockerfile
+    environment:
+      REDIS_URL: redis://redis:6379
+      ANDROID_TEMPLATE: /opt/appforge/template
+      ARTIFACT_DIR: /artifacts
+      WORKER_CONCURRENCY: "1"
+    volumes: ["build-artifacts:/artifacts"]
+    depends_on: [redis]
+    restart: unless-stopped
+    read_only: true
+    tmpfs: ["/tmp:size=2g,mode=1777", "/home/worker:size=64m,mode=0750"]
+    cap_drop: ["ALL"]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 3g
+    cpus: 2.0
+    pids_limit: 256
+    networks: [private]
+networks:
+  private: {}
+volumes:
+  redis-data: {}
+  build-artifacts: {}
